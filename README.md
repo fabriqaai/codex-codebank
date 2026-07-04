@@ -12,30 +12,30 @@ Works as either:
 ## Install As A Skill
 
 ```bash
-npx skills add hancengiz/codex-codebank@codex-banked-resets
+npx skills add fabriqaai/codex-codebank@codex-banked-resets
 ```
 
 Install directly from GitHub:
 
 ```bash
-npx skills add https://github.com/hancengiz/codex-codebank --skill codex-banked-resets
+npx skills add https://github.com/fabriqaai/codex-codebank --skill codex-banked-resets
 ```
 
 Install globally and skip prompts:
 
 ```bash
-npx skills add hancengiz/codex-codebank@codex-banked-resets -g -y
+npx skills add fabriqaai/codex-codebank@codex-banked-resets -g -y
 ```
 
 After indexing, the skill page should be available on
-[skills.sh](https://www.skills.sh/hancengiz/codex-codebank/codex-banked-resets).
+[skills.sh](https://www.skills.sh/fabriqaai/codex-codebank/codex-banked-resets).
 
 ## Install As A Codex Plugin
 
 Add this GitHub repository as a Codex plugin marketplace:
 
 ```bash
-codex plugin marketplace add hancengiz/codex-codebank --ref main
+codex plugin marketplace add fabriqaai/codex-codebank --ref main
 ```
 
 Install the plugin from that marketplace:

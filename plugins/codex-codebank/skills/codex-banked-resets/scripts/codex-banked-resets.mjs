@@ -457,14 +457,16 @@ async function fetchResetCredits(accessToken, accountId) {
 
   const credits = Array.isArray(response.json.credits) ? response.json.credits : [];
   const available = credits.filter((credit) => credit?.status === "available");
-  const futureExpiryDates = available
-    .map((credit) => parseDate(credit.expires_at))
-    .filter((date) => date && date.getTime() > Date.now())
-    .sort((a, b) => a.getTime() - b.getTime());
+  const futureExpiringCredits = available
+    .filter((credit) => {
+      const date = parseDate(credit.expires_at);
+      return date && date.getTime() > Date.now();
+    })
+    .sort((a, b) => parseDate(a.expires_at).getTime() - parseDate(b.expires_at).getTime());
 
   return {
     available_count: Math.max(Number(response.json.available_count || 0), 0),
-    next_expires_at: futureExpiryDates[0] ? futureExpiryDates[0].toISOString() : null,
+    next_expires_at: futureExpiringCredits[0]?.expires_at || null,
     credits: credits.map((credit) => ({
       reset_type: credit.reset_type || null,
       status: credit.status || null,
