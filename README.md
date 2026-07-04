@@ -1,13 +1,13 @@
 # Codex Codebank
 
-A small skill and Codex plugin for checking Codex banked reset credits and their expiry times.
+A small skill and Codex plugin package for checking Codex banked reset credits and their expiry times.
 
 The skill includes a JavaScript utility that tries local Codex auth first, falls back to official browser login when requested, and prints a sanitized reset summary without exposing tokens or raw account identifiers.
 
 Works as either:
 
 - a [`skills.sh`](https://skills.sh/)-compatible skill
-- a Codex plugin marketplace package
+- a Codex plugin package published from this repository
 
 ## Install As A Skill
 
@@ -32,7 +32,7 @@ After indexing, the skill page should be available on
 
 ## Install As A Codex Plugin
 
-Add this repo as a Codex plugin marketplace:
+Add this GitHub repository as a Codex plugin marketplace:
 
 ```bash
 codex plugin marketplace add hancengiz/codex-codebank --ref main
@@ -74,7 +74,7 @@ node skills/codex-banked-resets/scripts/codex-banked-resets.mjs --store-path ./b
 
 Codex plugin manifests do not currently include an install-time automation hook. After installing the skill or plugin, create a Codex scheduled automation that asks Codex to use `$codex-banked-resets` every morning and summarize the first expiry plus all available reset credits.
 
-For this local checkout, the direct command is:
+From a clone of this repository, the direct command is:
 
 ```bash
 npm run check:resets
