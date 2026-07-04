@@ -1,0 +1,10 @@
+{
+  "name": "codex-codebank",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "scripts": {
+    "check:resets": "node skills/codex-banked-resets/scripts/codex-banked-resets.mjs",
+    "check:resets:json": "node skills/codex-banked-resets/scripts/codex-banked-resets.mjs --json --no-store"
+  }
+}

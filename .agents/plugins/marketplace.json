@@ -1,0 +1,20 @@
+{
+  "name": "codex-codebank",
+  "interface": {
+    "displayName": "Codex Codebank"
+  },
+  "plugins": [
+    {
+      "name": "codex-codebank",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex-codebank"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "name": "codex-codebank",
+  "version": "0.1.0",
+  "description": "Check Codex banked reset credits and expiry times.",
+  "author": {
+    "name": "hancengiz",
+    "url": "https://github.com/hancengiz"
+  },
+  "homepage": "https://github.com/hancengiz/codex-codebank",
+  "repository": "https://github.com/hancengiz/codex-codebank",
+  "keywords": [
+    "codex",
+    "resets",
+    "usage",
+    "skills"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Codebank",
+    "shortDescription": "Check Codex banked reset expiries.",
+    "longDescription": "Codex Codebank provides a bundled skill and JavaScript utility for checking Codex banked reset credits, expiry times, and usage metadata without printing tokens or raw account identifiers.",
+    "developerName": "hancengiz",
+    "category": "Productivity",
+    "capabilities": [
+      "Skills"
+    ],
+    "defaultPrompt": [
+      "Check when my Codex banked resets expire.",
+      "Set up a morning reminder for my Codex resets."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

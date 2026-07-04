@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Banked Resets"
+  short_description: "Check Codex banked reset expiries"
+  default_prompt: "Use $codex-banked-resets to check when my Codex banked resets expire."
