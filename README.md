@@ -2,7 +2,7 @@
 
 A small skill and Codex plugin package for checking Codex banked reset credits and their expiry times.
 
-The skill includes a JavaScript utility that tries local Codex auth first, falls back to official browser login when requested, and prints a sanitized reset summary without exposing tokens or raw account identifiers.
+The skill includes a JavaScript utility that discovers all unique local Codex auth credentials, reports each account separately, falls back to official browser login when requested, and prints a sanitized reset summary without exposing tokens or raw account identifiers.
 
 Works as either:
 
@@ -52,6 +52,14 @@ From this repository:
 node skills/codex-banked-resets/scripts/codex-banked-resets.mjs
 ```
 
+By default, local auth mode reports every unique credential found in `~/.codex/auth.json` and `~/.codex/accounts/*.auth.json`. If a secondary account is stale or rejected, the utility keeps reporting the other accounts and marks the stale one with the HTTP status returned by the usage/reset endpoints.
+
+Use the old first-readable-account behavior:
+
+```bash
+node skills/codex-banked-resets/scripts/codex-banked-resets.mjs --first
+```
+
 Force browser login:
 
 ```bash
@@ -82,12 +90,14 @@ npm run check:resets
 
 ## What It Reports
 
-- number of available banked resets
-- first reset expiry
-- all available reset expiries
+- every discovered local Codex account, labeled `Account 1`, `Account 2`, etc.
+- number of available banked resets per readable account
+- first reset expiry per readable account
+- all available reset expiries per readable account
 - usage metadata when available
+- stale or rejected account status when usage/reset endpoints fail
 - UTC timestamps plus local timezone rendering
 
 ## Privacy Notes
 
-The script reads local Codex auth files only to call the live reset-credit endpoint. It does not print tokens, cookies, raw account IDs, or full backend payloads. Saved snapshots use a short hash as the account key.
+The script reads local Codex auth files only to call the live reset-credit endpoint. It does not print tokens, cookies, raw account IDs, auth filenames, or full backend payloads. Saved snapshots use a short hash as the account key.

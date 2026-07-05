@@ -56,6 +56,7 @@ function parseArgs(args) {
     mode: "auto",
     json: false,
     noStore: false,
+    first: false,
     storePath: DEFAULTS.storePath,
     timeoutMs: DEFAULTS.timeoutMs,
     port: DEFAULTS.port,
@@ -73,6 +74,7 @@ function parseArgs(args) {
     if (arg === "--help" || arg === "-h") options.help = true;
     else if (arg === "--json") options.json = true;
     else if (arg === "--no-store") options.noStore = true;
+    else if (arg === "--first" || arg === "--single") options.first = true;
     else if (arg === "--login") options.mode = "login";
     else if (arg === "--local-auth") options.mode = "local";
     else if (arg === "--store-path") options.storePath = resolve(next());
@@ -99,6 +101,7 @@ function printHelp() {
 Options:
   --local-auth          Use local Codex auth files only
   --login               Force official browser login
+  --first, --single     Report only the first local account with readable reset credits
   --json                Print sanitized JSON
   --no-store            Do not save banked_resets_store.json
   --store-path <path>   Save snapshot to a custom path
@@ -109,18 +112,87 @@ Options:
 
 async function collectSnapshot(options) {
   if (options.mode !== "login") {
-    const local = await tryLocalAuth(options);
+    const local = await collectLocalAuthSnapshot(options);
     if (local) return local;
     if (options.mode === "local") {
       throw new Error("No usable local Codex auth file was found");
     }
   }
 
-  return loginAndFetch(options);
+  const loginRecord = await loginAndFetch(options);
+  return buildSnapshot({ source: "oauth-login", accounts: [loginRecord] });
 }
 
-async function tryLocalAuth(options) {
+async function collectLocalAuthSnapshot(options) {
+  const { files, credentials } = await findLocalCredentials();
+  if (credentials.length === 0) return null;
+
+  if (options.first) {
+    return collectFirstLocalAuthSnapshot(options, files, credentials);
+  }
+
+  const accounts = [];
+
+  for (const [index, credential] of credentials.entries()) {
+    if (!options.json) {
+      console.error(`Trying local auth credential ${index + 1} (account id present=${Boolean(credential.accountId)})`);
+    }
+
+    accounts.push(
+      await assembleRecord({
+        accessToken: credential.accessToken,
+        accountId: credential.accountId,
+        authClaims: {},
+        source: "local-auth",
+        label: `Account ${index + 1}`,
+      }),
+    );
+  }
+
+  return buildSnapshot({
+    source: "local-auth",
+    accounts,
+    localAuthFilesFound: files.length,
+    uniqueLocalCredentials: credentials.length,
+  });
+}
+
+async function collectFirstLocalAuthSnapshot(options, files, credentials) {
+  for (const [index, credential] of credentials.entries()) {
+    if (!options.json) {
+      console.error(`Trying local auth credential ${index + 1} (account id present=${Boolean(credential.accountId)})`);
+    }
+
+    const record = await assembleRecord({
+      accessToken: credential.accessToken,
+      accountId: credential.accountId,
+      authClaims: {},
+      source: "local-auth",
+      label: `Account ${index + 1}`,
+    });
+
+    if (!record.reset_credits.error) {
+      return buildSnapshot({
+        source: "local-auth",
+        accounts: [record],
+        localAuthFilesFound: files.length,
+        uniqueLocalCredentials: credentials.length,
+        mode: "first-readable",
+      });
+    }
+
+    if (!options.json) {
+      console.error(`Local auth credential ${index + 1} failed: ${record.reset_credits.error}`);
+    }
+  }
+
+  return null;
+}
+
+async function findLocalCredentials() {
   const files = await findLocalAuthFiles();
+  const credentials = [];
+  const seen = new Set();
 
   for (const file of files) {
     const auth = await readAuthFile(file);
@@ -128,23 +200,13 @@ async function tryLocalAuth(options) {
     const accountId = auth?.tokens?.account_id;
 
     if (!accessToken) continue;
-    if (!options.json) {
-      console.error(`Trying local auth file: ${fileLabel(file)} (token present, account id present=${Boolean(accountId)})`);
-    }
-
-    try {
-      return await assembleRecord({
-        accessToken,
-        accountId,
-        authClaims: {},
-        source: "local-auth",
-      });
-    } catch (error) {
-      if (!options.json) console.error(`Local auth failed for ${fileLabel(file)}: ${error.message}`);
-    }
+    const dedupeKey = accountId ? `account:${accountId}` : `token:${shortHash(accessToken)}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    credentials.push({ file, accessToken, accountId });
   }
 
-  return null;
+  return { files, credentials };
 }
 
 async function findLocalAuthFiles() {
@@ -174,10 +236,6 @@ async function readAuthFile(file) {
   }
 }
 
-function fileLabel(file) {
-  return file.replace(`${homedir()}/`, "~/");
-}
-
 async function loginAndFetch(options) {
   const verifier = randomUrlToken(64);
   const challenge = base64Url(createHash("sha256").update(verifier).digest());
@@ -198,6 +256,7 @@ async function loginAndFetch(options) {
     accountId: claims.account_id,
     authClaims: claims,
     source: "oauth-login",
+    label: "Account 1",
   });
 }
 
@@ -349,22 +408,28 @@ async function exchangeCode(code, redirectUri, verifier) {
   return response.json;
 }
 
-async function assembleRecord({ accessToken, accountId, authClaims, source }) {
+async function assembleRecord({ accessToken, accountId, authClaims, source, label }) {
   if (!accessToken) throw new Error("Missing access token");
 
   const [accountMeta, usage, resets] = await Promise.all([
     fetchAccountMetadata(accessToken, accountId).catch((error) => ({ error: error.message })),
-    fetchProfileUsage(accessToken, accountId),
-    fetchResetCredits(accessToken, accountId),
+    fetchProfileUsage(accessToken, accountId).catch((error) => ({
+      available: false,
+      error: `Usage stats request failed: ${error.message}`,
+    })),
+    fetchResetCredits(accessToken, accountId).catch((error) => ({
+      available_count: 0,
+      next_expires_at: null,
+      credits: [],
+      error: `Reset credits request failed: ${error.message}`,
+    })),
   ]);
 
-  if (resets.error) throw new Error(resets.error);
-
   return {
-    version: 1,
     source,
     saved_at: new Date().toISOString(),
-    account_key: accountId ? shortHash(accountId) : "default",
+    label,
+    account_key: accountId ? shortHash(accountId) : shortHash(accessToken),
     auth: {
       plan_type: accountMeta.plan_type || authClaims.plan_type || null,
       subscription_expires_at: accountMeta.subscription_expires_at || authClaims.subscription_expires_at || null,
@@ -373,6 +438,21 @@ async function assembleRecord({ accessToken, accountId, authClaims, source }) {
     usage,
     reset_credits: resets,
   };
+}
+
+function buildSnapshot({ source, accounts, localAuthFilesFound = null, uniqueLocalCredentials = null, mode = null }) {
+  const snapshot = {
+    version: 2,
+    source,
+    saved_at: new Date().toISOString(),
+    accounts,
+  };
+
+  if (localAuthFilesFound != null) snapshot.local_auth_files_found = localAuthFilesFound;
+  if (uniqueLocalCredentials != null) snapshot.unique_local_credentials = uniqueLocalCredentials;
+  if (mode) snapshot.mode = mode;
+
+  return snapshot;
 }
 
 async function fetchAccountMetadata(accessToken, accountId) {
@@ -539,11 +619,20 @@ function shortHash(value) {
 
 async function saveSnapshot(path, record) {
   const store = await readStore(path);
+  const accounts = getAccounts(record);
+  const accountKeys = new Set(accounts.map((account) => account.account_key).filter(Boolean));
+
   store.version = 1;
   store.updated_at = new Date().toISOString();
+  store.last_snapshot = {
+    version: record.version || 1,
+    source: record.source || null,
+    saved_at: record.saved_at || null,
+    account_count: accounts.length,
+  };
   store.accounts = [
-    ...store.accounts.filter((item) => item.account_key !== record.account_key),
-    record,
+    ...store.accounts.filter((item) => !accountKeys.has(item.account_key)),
+    ...accounts,
   ];
 
   await mkdir(dirname(path), { recursive: true });
@@ -560,32 +649,68 @@ async function readStore(path) {
 }
 
 function printSummary(record, options) {
-  const count = record.reset_credits.available_count || 0;
-  const credits = record.reset_credits.credits
-    .filter((credit) => credit.status === "available")
-    .sort((a, b) => (parseDate(a.expires_at)?.getTime() || Infinity) - (parseDate(b.expires_at)?.getTime() || Infinity));
+  const accounts = getAccounts(record);
 
   console.log("\nCodex banked reset snapshot");
-  if (record.auth.plan_type) console.log(`Plan: ${record.auth.plan_type}`);
-  if (record.auth.subscription_expires_at) console.log(`Subscription expires: ${formatStamp(record.auth.subscription_expires_at)}`);
-  if (record.usage.stats_as_of) console.log(`Usage stats as of: ${record.usage.stats_as_of}`);
-  if (record.usage.generated_at) console.log(`Usage generated at: ${record.usage.generated_at}`);
-  if (record.usage.summary?.lifetime_tokens != null) console.log(`Lifetime tokens: ${record.usage.summary.lifetime_tokens}`);
-
-  console.log(`You have ${count} banked ${count === 1 ? "reset" : "resets"}.`);
-  if (credits[0]?.expires_at) {
-    console.log(`First reset expires: ${formatStamp(credits[0].expires_at)}`);
+  if (record.local_auth_files_found != null || record.unique_local_credentials != null) {
+    console.log(
+      `Local auth files found: ${record.local_auth_files_found ?? "unknown"}; unique credentials: ${
+        record.unique_local_credentials ?? accounts.length
+      }`,
+    );
   }
 
-  if (credits.length > 0) {
-    console.log("All available resets:");
-    credits.forEach((credit, index) => {
-      const title = credit.title || credit.reset_type || "reset";
-      console.log(`${index + 1}. ${title} - expires ${formatStamp(credit.expires_at)}`);
-    });
+  accounts.forEach((account, index) => {
+    printAccountSummary(account, index, accounts.length);
+  });
+
+  const readableAccounts = accounts.filter((account) => !account.reset_credits?.error);
+  if (readableAccounts.length > 1) {
+    const total = readableAccounts.reduce((sum, account) => sum + (account.reset_credits.available_count || 0), 0);
+    console.log(`\nTotal available resets across readable accounts: ${total}.`);
   }
 
   if (!options.noStore) console.log(`\nSnapshot stored at: ${options.storePath}`);
+}
+
+function getAccounts(record) {
+  return Array.isArray(record.accounts) ? record.accounts : [record];
+}
+
+function printAccountSummary(record, index, totalAccounts) {
+  const label = record.label || (totalAccounts > 1 ? `Account ${index + 1}` : "Account");
+  const resetError = record.reset_credits?.error;
+  const usageError = record.usage?.error;
+  const count = record.reset_credits?.available_count || 0;
+  const credits = (record.reset_credits?.credits || [])
+    .filter((credit) => credit.status === "available")
+    .sort((a, b) => (parseDate(a.expires_at)?.getTime() || Infinity) - (parseDate(b.expires_at)?.getTime() || Infinity));
+
+  console.log(`\n${label}`);
+  if (resetError) {
+    console.log(`Reset credits unavailable: ${resetError}`);
+  } else {
+    console.log(`You have ${count} banked ${count === 1 ? "reset" : "resets"}.`);
+    if (credits[0]?.expires_at) {
+      console.log(`First reset expires: ${formatStamp(credits[0].expires_at)}`);
+    }
+  }
+
+  if (record.auth?.plan_type) console.log(`Plan: ${record.auth.plan_type}`);
+  if (record.auth?.subscription_expires_at) console.log(`Subscription expires: ${formatStamp(record.auth.subscription_expires_at)}`);
+  if (record.auth?.metadata_error) console.log(`Account metadata unavailable: ${record.auth.metadata_error}`);
+  if (record.usage?.stats_as_of) console.log(`Usage stats as of: ${record.usage.stats_as_of}`);
+  if (record.usage?.generated_at) console.log(`Usage generated at: ${record.usage.generated_at}`);
+  if (record.usage?.summary?.lifetime_tokens != null) console.log(`Lifetime tokens: ${record.usage.summary.lifetime_tokens}`);
+  if (usageError) console.log(`Usage unavailable: ${usageError}`);
+
+  if (credits.length > 0) {
+    console.log("All available resets:");
+    credits.forEach((credit, creditIndex) => {
+      const title = credit.title || credit.reset_type || "reset";
+      console.log(`${creditIndex + 1}. ${title} - expires ${formatStamp(credit.expires_at)}`);
+    });
+  }
 }
 
 function formatStamp(value) {

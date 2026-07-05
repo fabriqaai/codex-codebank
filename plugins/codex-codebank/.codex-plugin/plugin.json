@@ -1,7 +1,7 @@
 {
   "name": "codex-codebank",
-  "version": "0.1.0",
-  "description": "Check Codex banked reset credits and expiry times.",
+  "version": "0.1.1",
+  "description": "Check Codex banked reset credits and expiry times across local accounts.",
   "author": {
     "name": "Fabriqa AI",
     "url": "https://github.com/fabriqaai"
@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "Codex Codebank",
     "shortDescription": "Check Codex banked reset expiries.",
-    "longDescription": "Codex Codebank provides a bundled skill and JavaScript utility for checking Codex banked reset credits, expiry times, and usage metadata without printing tokens or raw account identifiers.",
+    "longDescription": "Codex Codebank provides a bundled skill and JavaScript utility for checking Codex banked reset credits, expiry times, usage metadata, and all locally configured Codex accounts without printing tokens or raw account identifiers.",
     "developerName": "Fabriqa AI",
     "category": "Productivity",
     "capabilities": [
